@@ -540,6 +540,12 @@
         }
 
         function createPeer(socketId, peerUserName, isInitiator) {
+            // 既に接続が存在する場合は削除
+            if (peers.has(socketId)) {
+                console.log('既存の接続を削除:', socketId);
+                removePeer(socketId);
+            }
+
             const connection = new RTCPeerConnection(rtcConfig);
 
             if (localStream) {
@@ -555,6 +561,7 @@
             };
 
             connection.ontrack = (event) => {
+                console.log('トラック受信:', socketId);
                 const stream = event.streams[0];
                 addRemoteVideo(socketId, peerUserName, stream);
             };
@@ -582,6 +589,17 @@
         function addRemoteVideo(socketId, peerUserName, stream) {
             const peer = peers.get(socketId);
             if (!peer) return;
+
+            // 既に存在する場合は削除
+            if (peer.videoElement) {
+                peer.videoElement.remove();
+            }
+
+            // 同じsocketIdのビデオ要素が既に存在する場合は削除
+            const existingBox = document.querySelector(`[data-socket-id="${socketId}"]`);
+            if (existingBox) {
+                existingBox.remove();
+            }
 
             const box = document.createElement('div');
             box.className = 'video-box';
@@ -809,3 +827,4 @@
     </script>
 </body>
 </html>
+
