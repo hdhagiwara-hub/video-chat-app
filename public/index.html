@@ -465,7 +465,7 @@
                     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
                 });
                 selfieSegmentation.setOptions({
-                    modelSelection: 1,
+                    modelSelection: 0, // 0 = 軽量版（高速）, 1 = 高精度版（低速）
                     selfieMode: true,
                 });
                 selfieSegmentation.onResults(onResults);
@@ -750,7 +750,16 @@
 
         async function processVideo() {
             if (localVideo && localVideo.readyState >= 2 && bgType !== 'none') {
-                await selfieSegmentation.send({ image: localVideo });
+                try {
+                    await selfieSegmentation.send({ image: localVideo });
+                } catch (error) {
+                    console.error('処理エラー:', error);
+                }
+                // フレームレート調整（30fps → 15fps程度に）
+                setTimeout(() => {
+                    animationId = requestAnimationFrame(processVideo);
+                }, 66); // 約15fps
+            } else if (bgType !== 'none') {
                 animationId = requestAnimationFrame(processVideo);
             }
         }
@@ -758,22 +767,31 @@
         function onResults(results) {
             if (!localCanvas) return;
 
-            const ctx = localCanvas.getContext('2d');
+            const ctx = localCanvas.getContext('2d', { alpha: false }); // アルファチャンネルを無効化して高速化
             ctx.save();
             ctx.clearRect(0, 0, localCanvas.width, localCanvas.height);
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = localCanvas.width;
-            tempCanvas.height = localCanvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            // 一時キャンバスを使い回す（毎回作成しない）
+            if (!window.tempCanvas) {
+                window.tempCanvas = document.createElement('canvas');
+                window.tempCanvas.width = localCanvas.width;
+                window.tempCanvas.height = localCanvas.height;
+            }
+            
+            const tempCanvas = window.tempCanvas;
+            const tempCtx = tempCanvas.getContext('2d', { alpha: true });
 
+            // 人物を切り抜き
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
             tempCtx.drawImage(results.image, 0, 0, localCanvas.width, localCanvas.height);
             tempCtx.globalCompositeOperation = 'destination-in';
             tempCtx.drawImage(results.segmentationMask, 0, 0, localCanvas.width, localCanvas.height);
+            tempCtx.globalCompositeOperation = 'source-over';
 
+            // 背景を描画
             drawBackground(ctx);
 
-            ctx.globalCompositeOperation = 'source-over';
+            // 人物を合成
             ctx.drawImage(tempCanvas, 0, 0);
             ctx.restore();
         }
@@ -787,13 +805,20 @@
                 ctx.drawImage(localVideo, 0, 0, localCanvas.width, localCanvas.height);
                 ctx.filter = 'none';
             } else if (bgType === 'image' && bgImage) {
+                // 画像をキャッシュして描画を高速化
                 const scale = Math.max(
                     localCanvas.width / bgImage.width,
                     localCanvas.height / bgImage.height
                 );
-                const x = (localCanvas.width / 2) - (bgImage.width / 2) * scale;
-                const y = (localCanvas.height / 2) - (bgImage.height / 2) * scale;
-                ctx.drawImage(bgImage, x, y, bgImage.width * scale, bgImage.height * scale);
+                const scaledWidth = bgImage.width * scale;
+                const scaledHeight = bgImage.height * scale;
+                const x = (localCanvas.width - scaledWidth) / 2;
+                const y = (localCanvas.height - scaledHeight) / 2;
+                
+                // imageSmoothingEnabledをfalseにして高速化
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(bgImage, x, y, scaledWidth, scaledHeight);
+                ctx.imageSmoothingEnabled = true;
             }
         }
 
@@ -827,4 +852,3 @@
     </script>
 </body>
 </html>
-
