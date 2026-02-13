@@ -455,17 +455,37 @@
                         cancelAnimationFrame(animationId);
                         animationId = null;
                     }
+                    isProcessing = false;
+                    
+                    // processedStreamをクリーンアップ
+                    if (processedStream) {
+                        processedStream.getTracks().forEach(track => track.stop());
+                        processedStream = null;
+                    }
+                    
                     // 元のストリームに戻す
                     switchToOriginalStream();
                 } else {
                     // 背景あり：Canvasを表示・送信
                     localVideo.style.display = 'none';
                     localCanvas.style.display = 'block';
+                    
+                    // processedStreamを再作成
+                    if (processedStream) {
+                        processedStream.getTracks().forEach(track => track.stop());
+                        processedStream = null;
+                    }
+                    
+                    // 処理開始
                     if (!animationId && localVideo.readyState >= 2) {
+                        isProcessing = false;
                         processVideo();
                     }
-                    // Canvasストリームに切り替え
-                    switchToProcessedStream();
+                    
+                    // Canvasストリームに切り替え（少し遅延させる）
+                    setTimeout(() => {
+                        switchToProcessedStream();
+                    }, 500);
                 }
             }
         }
@@ -493,20 +513,28 @@
         function switchToProcessedStream() {
             if (!localCanvas) return;
             
-            // CanvasからMediaStreamを作成
+            // CanvasからMediaStreamを作成（初回のみ）
             if (!processedStream) {
-                processedStream = localCanvas.captureStream(15); // 15fps
+                const fps = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 10 : 15;
+                processedStream = localCanvas.captureStream(fps);
+                console.log('Canvasストリーム作成:', fps + 'fps');
             }
             
             const videoTrack = processedStream.getVideoTracks()[0];
+            if (!videoTrack) {
+                console.error('Canvasビデオトラックが見つかりません');
+                return;
+            }
             
             peers.forEach((peer, socketId) => {
                 if (peer.connection) {
                     const senders = peer.connection.getSenders();
                     const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
                     
-                    if (videoSender && videoTrack) {
-                        videoSender.replaceTrack(videoTrack).catch(err => {
+                    if (videoSender) {
+                        videoSender.replaceTrack(videoTrack).then(() => {
+                            console.log('Canvasストリームに切り替え完了:', socketId);
+                        }).catch(err => {
                             console.error('トラック切り替えエラー:', err);
                         });
                     }
@@ -821,39 +849,45 @@
         }
 
         async function processVideo() {
-            if (!localVideo || !localCanvas || bgType === 'none' || isProcessing) {
+            if (!localVideo || !localCanvas || bgType === 'none') {
                 return;
             }
 
-            if (localVideo.readyState >= 2) {
+            if (localVideo.readyState >= 2 && !isProcessing) {
                 isProcessing = true;
                 try {
                     await selfieSegmentation.send({ image: localVideo });
                 } catch (error) {
                     console.error('処理エラー:', error);
+                    isProcessing = false;
                 }
-                isProcessing = false;
             }
             
             // デバイスに応じてフレームレート調整
             const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
             const delay = isMobile ? 100 : 66; // モバイル: 10fps, PC: 15fps
             
-            setTimeout(() => {
-                if (bgType !== 'none') {
+            // 継続的に実行
+            if (bgType !== 'none') {
+                setTimeout(() => {
                     animationId = requestAnimationFrame(processVideo);
-                }
-            }, delay);
+                }, delay);
+            } else {
+                console.log('背景処理停止');
+            }
         }
 
         function onResults(results) {
-            if (!localCanvas) return;
+            if (!localCanvas) {
+                isProcessing = false;
+                return;
+            }
 
-            const ctx = localCanvas.getContext('2d', { alpha: false }); // アルファチャンネルを無効化して高速化
+            const ctx = localCanvas.getContext('2d', { alpha: false });
             ctx.save();
             ctx.clearRect(0, 0, localCanvas.width, localCanvas.height);
 
-            // 一時キャンバスを使い回す（毎回作成しない）
+            // 一時キャンバスを使い回す
             if (!window.tempCanvas) {
                 window.tempCanvas = document.createElement('canvas');
                 window.tempCanvas.width = localCanvas.width;
@@ -876,6 +910,9 @@
             // 人物を合成
             ctx.drawImage(tempCanvas, 0, 0);
             ctx.restore();
+            
+            // 処理完了フラグをリセット
+            isProcessing = false;
         }
 
         function drawBackground(ctx) {
@@ -941,5 +978,6 @@
     </script>
 </body>
 </html>
+
 
 
