@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ビデオチャット - iframe埋め込みサンプル</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .iframe-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        iframe {
+            width: 100%;
+            height: 800px;
+            border: none;
+            border-radius: 8px;
+        }
+
+        .code-box {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+
+        @media (max-width: 768px) {
+            iframe {
+                height: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📺 ビデオチャット - iframe埋め込みサンプル</h1>
+
+        <div class="info">
+            <h2>使い方</h2>
+            <p>下のiframe内でビデオチャットアプリが動作しています。</p>
+            <p>あなたのウェブサイトに埋め込む場合は、以下のコードをコピーしてください：</p>
+            
+            <div class="code-box">
+&lt;!-- ビデオチャット埋め込みコード --&gt;<br>
+&lt;iframe<br>
+&nbsp;&nbsp;src="<span id="iframeUrl">https://your-app.onrender.com</span>"<br>
+&nbsp;&nbsp;width="100%"<br>
+&nbsp;&nbsp;height="800"<br>
+&nbsp;&nbsp;frameborder="0"<br>
+&nbsp;&nbsp;allow="camera; microphone; display-capture"<br>
+&nbsp;&nbsp;allowfullscreen<br>
+&gt;&lt;/iframe&gt;
+            </div>
+
+            <h3>重要なポイント</h3>
+            <ul>
+                <li><code>allow="camera; microphone; display-capture"</code> - カメラとマイクのアクセスを許可</li>
+                <li>iframe内でもHTTPSが必須です</li>
+                <li>親ページもHTTPSである必要があります</li>
+            </ul>
+        </div>
+
+        <div class="iframe-container">
+            <h2>埋め込みプレビュー</h2>
+            <iframe 
+                id="videoChat"
+                src="/"
+                allow="camera *; microphone *; display-capture *"
+                allowfullscreen
+            ></iframe>
+        </div>
+    </div>
+
+    <script>
+        // 現在のURLをサンプルコードに表示
+        document.getElementById('iframeUrl').textContent = window.location.origin;
+        
+        // iframe内のアプリと通信（オプション）
+        window.addEventListener('message', (event) => {
+            // iframeからのメッセージを受信
+            console.log('iframeからのメッセージ:', event.data);
+        });
+    </script>
+</body>
+</html>
