@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- iframe内でのカメラ・マイクアクセスを許可 -->
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*, display-capture=*">
     <title>シンプルビデオチャット</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
@@ -483,7 +485,15 @@
                 return;
             }
 
-            socket = io();
+            // iframeで動作するように、現在のホストを使用
+            const socketUrl = window.location.origin;
+            console.log('接続先:', socketUrl);
+            
+            socket = io(socketUrl, {
+                transports: ['websocket', 'polling'], // iframe対応のため両方指定
+                withCredentials: false,
+                autoConnect: true
+            });
 
             socket.on('connect', () => {
                 console.log('接続完了');
@@ -491,6 +501,11 @@
                 document.getElementById('login').style.display = 'none';
                 document.getElementById('main').style.display = 'block';
                 document.getElementById('status').textContent = `ルーム "${roomId}" に参加`;
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('接続エラー:', error);
+                document.getElementById('status').textContent = '接続エラー: ' + error.message;
             });
 
             socket.on('existing-users', (users) => {
@@ -852,3 +867,4 @@
     </script>
 </body>
 </html>
+
