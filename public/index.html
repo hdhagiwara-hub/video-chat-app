@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルビデオチャット</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 10px;
+        }
+
+        .header {
+            background: #2a2a2a;
+            padding: 8px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .login {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            margin: 50px auto;
+        }
+
+        .login h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            margin: 5px 0 10px 0;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 13px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #0084ff;
+        }
+
+        button {
+            padding: 6px 12px;
+            margin: 3px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #0084ff;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .main {
+            display: none;
+        }
+
+        .controls {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .status {
+            background: #1e3a5f;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .video-box {
+            position: relative;
+            background: #000;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            aspect-ratio: 4/3;
+        }
+
+        .video-box:hover {
+            box-shadow: 0 0 0 2px #0084ff;
+        }
+
+        .video-box.expanded {
+            grid-column: 1 / -1;
+            aspect-ratio: 16/9;
+        }
+
+        .video-box video,
+        .video-box canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(0,0,0,0.7);
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .bg-options {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .bg-btn {
+            width: 50px;
+            height: 38px;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.2s;
+        }
+
+        .bg-btn:hover {
+            border-color: #0084ff;
+        }
+
+        .bg-btn.active {
+            border-color: #28a745;
+        }
+
+        .bg-off {
+            background: linear-gradient(45deg, #444 25%, transparent 25%, transparent 75%, #444 75%),
+                        linear-gradient(45deg, #444 25%, transparent 25%, transparent 75%, #444 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 5px 5px;
+            color: #aaa;
+        }
+
+        .bg-blur {
+            background: linear-gradient(135deg, #666 0%, #999 100%);
+            color: white;
+        }
+
+        .chat {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat h3 {
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            background: #1a1a1a;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .chat-msg {
+            margin-bottom: 8px;
+        }
+
+        .chat-sender {
+            font-weight: bold;
+            color: #0084ff;
+            font-size: 11px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 5px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #aaa;
+            margin-right: 5px;
+        }
+
+        input[type="color"] {
+            width: 40px;
+            height: 28px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 80px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .video-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-row {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎥 シンプルビデオチャット</h1>
+    </div>
+
+    <!-- ログイン -->
+    <div class="login" id="login">
+        <h2>参加</h2>
+        <input type="text" id="userName" placeholder="名前" value="ユーザー">
+        <input type="text" id="roomId" placeholder="ルームID" value="room1">
+        <button class="btn-primary" id="joinBtn" style="width: 100%;">参加</button>
+    </div>
+
+    <!-- メイン -->
+    <div class="main" id="main">
+        <div class="controls">
+            <div class="status" id="status">接続中...</div>
+            
+            <div class="control-row">
+                <button class="btn-success" id="startBtn">📹 開始</button>
+                <button class="btn-danger" id="stopBtn" disabled>⏹ 停止</button>
+                <button class="btn-primary" id="micBtn">🎤 ON</button>
+                <button class="btn-danger" id="leaveBtn">退出</button>
+            </div>
+
+            <div class="control-row">
+                <span class="label">背景:</span>
+                <div class="bg-options">
+                    <div class="bg-btn bg-off active" data-type="none">OFF</div>
+                    <div class="bg-btn bg-blur" data-type="blur">ぼかし</div>
+                    <div class="bg-btn" data-type="color" style="background: #00ff00;"></div>
+                    <div class="bg-btn" data-type="color" style="background: #0066ff;"></div>
+                    <div class="bg-btn" data-type="color" style="background: #ff0066;"></div>
+                    <div class="bg-btn" data-type="image" style="background: #333; color: #aaa;">画像</div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <span class="label">色:</span>
+                <input type="color" id="customColor" value="#00ff00">
+                <span class="label">ぼかし:</span>
+                <input type="range" id="blurSlider" min="0" max="50" value="10">
+                <span class="label" id="blurValue">10px</span>
+            </div>
+
+            <input type="file" id="bgImage" accept="image/*" class="hidden">
+        </div>
+
+        <div class="video-grid" id="videoGrid"></div>
+
+        <div class="chat">
+            <h3>💬 チャット</h3>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="メッセージ">
+                <button class="btn-primary" id="sendBtn">送信</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let localStream;
+        let localVideo, localCanvas;
+        let selfieSegmentation;
+        let peers = new Map();
+        let bgType = 'none';
+        let bgImage = null;
+        let bgColor = '#00ff00';
+        let blurAmount = 10;
+        let userName = '';
+        let roomId = '';
+        let micEnabled = true;
+        let animationId = null;
+        let expandedVideo = null;
+
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEvents();
+            initMediaPipe();
+        });
+
+        function setupEvents() {
+            document.getElementById('joinBtn').onclick = join;
+            document.getElementById('startBtn').onclick = startCamera;
+            document.getElementById('stopBtn').onclick = stopCamera;
+            document.getElementById('micBtn').onclick = toggleMic;
+            document.getElementById('leaveBtn').onclick = leave;
+            document.getElementById('sendBtn').onclick = sendChat;
+            document.getElementById('chatInput').onkeypress = (e) => {
+                if (e.key === 'Enter') sendChat();
+            };
+
+            document.querySelectorAll('.bg-btn').forEach(btn => {
+                btn.onclick = function() {
+                    document.querySelectorAll('.bg-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const type = this.dataset.type;
+                    if (type === 'none') {
+                        bgType = 'none';
+                        updateVideoDisplay();
+                    } else if (type === 'blur') {
+                        bgType = 'blur';
+                        updateVideoDisplay();
+                    } else if (type === 'color') {
+                        bgType = 'color';
+                        bgColor = this.style.background;
+                        updateVideoDisplay();
+                    } else if (type === 'image') {
+                        document.getElementById('bgImage').click();
+                    }
+                };
+            });
+
+            document.getElementById('customColor').onchange = (e) => {
+                bgType = 'color';
+                bgColor = e.target.value;
+                updateVideoDisplay();
+            };
+
+            document.getElementById('blurSlider').oninput = (e) => {
+                blurAmount = e.target.value;
+                document.getElementById('blurValue').textContent = blurAmount + 'px';
+            };
+
+            document.getElementById('bgImage').onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            bgImage = img;
+                            bgType = 'image';
+                            updateVideoDisplay();
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+        }
+
+        function updateVideoDisplay() {
+            if (localVideo && localCanvas) {
+                if (bgType === 'none') {
+                    localVideo.style.display = 'block';
+                    localCanvas.style.display = 'none';
+                    if (animationId) {
+                        cancelAnimationFrame(animationId);
+                        animationId = null;
+                    }
+                } else {
+                    localVideo.style.display = 'none';
+                    localCanvas.style.display = 'block';
+                    if (!animationId && localVideo.readyState >= 2) {
+                        processVideo();
+                    }
+                }
+            }
+        }
+
+        function initMediaPipe() {
+            try {
+                selfieSegmentation = new SelfieSegmentation({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+                });
+                selfieSegmentation.setOptions({
+                    modelSelection: 1,
+                    selfieMode: true,
+                });
+                selfieSegmentation.onResults(onResults);
+                console.log('MediaPipe OK');
+            } catch (error) {
+                console.error('MediaPipe エラー:', error);
+            }
+        }
+
+        function join() {
+            userName = document.getElementById('userName').value.trim();
+            roomId = document.getElementById('roomId').value.trim();
+            if (!userName || !roomId) {
+                alert('名前とルームIDを入力してください');
+                return;
+            }
+
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('接続完了');
+                socket.emit('join-room', roomId, userName);
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+                document.getElementById('status').textContent = `ルーム "${roomId}" に参加`;
+            });
+
+            socket.on('existing-users', (users) => {
+                users.forEach(user => createPeer(user.socketId, user.userName, true));
+            });
+
+            socket.on('user-connected', (socketId, userName) => {
+                addChatMsg(`${userName} が参加`, 'システム');
+                createPeer(socketId, userName, false);
+            });
+
+            socket.on('user-disconnected', (socketId) => {
+                const peer = peers.get(socketId);
+                if (peer) {
+                    addChatMsg(`${peer.userName} が退出`, 'システム');
+                    removePeer(socketId);
+                }
+            });
+
+            socket.on('offer', async (offer, fromId) => {
+                const peer = peers.get(fromId);
+                if (peer && peer.connection) {
+                    await peer.connection.setRemoteDescription(new RTCSessionDescription(offer));
+                    const answer = await peer.connection.createAnswer();
+                    await peer.connection.setLocalDescription(answer);
+                    socket.emit('answer', answer, fromId);
+                }
+            });
+
+            socket.on('answer', async (answer, fromId) => {
+                const peer = peers.get(fromId);
+                if (peer && peer.connection) {
+                    await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
+                }
+            });
+
+            socket.on('ice-candidate', async (candidate, fromId) => {
+                const peer = peers.get(fromId);
+                if (peer && peer.connection) {
+                    await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+            });
+
+            socket.on('chat-message', (msg, sender) => {
+                addChatMsg(msg, sender);
+            });
+        }
+
+        function createPeer(socketId, peerUserName, isInitiator) {
+            const connection = new RTCPeerConnection(rtcConfig);
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    connection.addTrack(track, localStream);
+                });
+            }
+
+            connection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', event.candidate, socketId);
+                }
+            };
+
+            connection.ontrack = (event) => {
+                const stream = event.streams[0];
+                addRemoteVideo(socketId, peerUserName, stream);
+            };
+
+            peers.set(socketId, {
+                connection,
+                userName: peerUserName,
+                videoElement: null
+            });
+
+            if (isInitiator && localStream) {
+                createOffer(socketId);
+            }
+        }
+
+        async function createOffer(socketId) {
+            const peer = peers.get(socketId);
+            if (peer && peer.connection) {
+                const offer = await peer.connection.createOffer();
+                await peer.connection.setLocalDescription(offer);
+                socket.emit('offer', offer, socketId);
+            }
+        }
+
+        function addRemoteVideo(socketId, peerUserName, stream) {
+            const peer = peers.get(socketId);
+            if (!peer) return;
+
+            const box = document.createElement('div');
+            box.className = 'video-box';
+            box.dataset.socketId = socketId;
+
+            const video = document.createElement('video');
+            video.autoplay = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.textContent = peerUserName;
+
+            box.appendChild(video);
+            box.appendChild(label);
+
+            box.onclick = () => toggleExpand(box);
+
+            document.getElementById('videoGrid').appendChild(box);
+            peer.videoElement = box;
+        }
+
+        function removePeer(socketId) {
+            const peer = peers.get(socketId);
+            if (peer) {
+                if (peer.connection) peer.connection.close();
+                if (peer.videoElement) peer.videoElement.remove();
+                peers.delete(socketId);
+            }
+        }
+
+        function toggleExpand(box) {
+            if (expandedVideo === box) {
+                box.classList.remove('expanded');
+                expandedVideo = null;
+            } else {
+                if (expandedVideo) expandedVideo.classList.remove('expanded');
+                box.classList.add('expanded');
+                expandedVideo = box;
+            }
+        }
+
+        async function startCamera() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 },
+                    audio: true
+                });
+
+                console.log('カメラ取得成功');
+
+                const box = document.createElement('div');
+                box.className = 'video-box';
+                box.id = 'localBox';
+
+                const video = document.createElement('video');
+                video.id = 'localVideo';
+                video.autoplay = true;
+                video.playsInline = true;
+                video.muted = true;
+                video.srcObject = localStream;
+
+                const canvas = document.createElement('canvas');
+                canvas.id = 'localCanvas';
+                canvas.width = 640;
+                canvas.height = 480;
+                canvas.style.display = 'none';
+
+                const label = document.createElement('div');
+                label.className = 'video-label';
+                label.textContent = `${userName} (あなた)`;
+
+                box.appendChild(video);
+                box.appendChild(canvas);
+                box.appendChild(label);
+
+                box.onclick = () => toggleExpand(box);
+
+                document.getElementById('videoGrid').insertBefore(box, document.getElementById('videoGrid').firstChild);
+
+                localVideo = video;
+                localCanvas = canvas;
+
+                video.onloadeddata = () => {
+                    console.log('ビデオ準備完了');
+                };
+
+                peers.forEach((peer, socketId) => {
+                    if (peer.connection) {
+                        localStream.getTracks().forEach(track => {
+                            peer.connection.addTrack(track, localStream);
+                        });
+                        createOffer(socketId);
+                    }
+                });
+
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('status').textContent = 'カメラ起動';
+            } catch (error) {
+                console.error('カメラエラー:', error);
+                document.getElementById('status').textContent = 'カメラエラー: ' + error.message;
+            }
+        }
+
+        function stopCamera() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+
+            const box = document.getElementById('localBox');
+            if (box) box.remove();
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = 'カメラ停止';
+        }
+
+        function toggleMic() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    micEnabled = !micEnabled;
+                    audioTrack.enabled = micEnabled;
+                    document.getElementById('micBtn').textContent = micEnabled ? '🎤 ON' : '🔇 OFF';
+                    document.getElementById('micBtn').className = micEnabled ? 'btn-primary' : 'btn-danger';
+                }
+            }
+        }
+
+        function leave() {
+            if (confirm('退出しますか？')) {
+                stopCamera();
+                peers.forEach((peer, socketId) => removePeer(socketId));
+                if (socket) socket.disconnect();
+                document.getElementById('login').style.display = 'block';
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('videoGrid').innerHTML = '';
+                document.getElementById('chatMessages').innerHTML = '';
+            }
+        }
+
+        async function processVideo() {
+            if (localVideo && localVideo.readyState >= 2 && bgType !== 'none') {
+                await selfieSegmentation.send({ image: localVideo });
+                animationId = requestAnimationFrame(processVideo);
+            }
+        }
+
+        function onResults(results) {
+            if (!localCanvas) return;
+
+            const ctx = localCanvas.getContext('2d');
+            ctx.save();
+            ctx.clearRect(0, 0, localCanvas.width, localCanvas.height);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = localCanvas.width;
+            tempCanvas.height = localCanvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.drawImage(results.image, 0, 0, localCanvas.width, localCanvas.height);
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(results.segmentationMask, 0, 0, localCanvas.width, localCanvas.height);
+
+            drawBackground(ctx);
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(tempCanvas, 0, 0);
+            ctx.restore();
+        }
+
+        function drawBackground(ctx) {
+            if (bgType === 'color') {
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(0, 0, localCanvas.width, localCanvas.height);
+            } else if (bgType === 'blur') {
+                ctx.filter = `blur(${blurAmount}px)`;
+                ctx.drawImage(localVideo, 0, 0, localCanvas.width, localCanvas.height);
+                ctx.filter = 'none';
+            } else if (bgType === 'image' && bgImage) {
+                const scale = Math.max(
+                    localCanvas.width / bgImage.width,
+                    localCanvas.height / bgImage.height
+                );
+                const x = (localCanvas.width / 2) - (bgImage.width / 2) * scale;
+                const y = (localCanvas.height / 2) - (bgImage.height / 2) * scale;
+                ctx.drawImage(bgImage, x, y, bgImage.width * scale, bgImage.height * scale);
+            }
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (msg && socket) {
+                socket.emit('chat-message', roomId, msg, userName);
+                input.value = '';
+            }
+        }
+
+        function addChatMsg(msg, sender) {
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            
+            const senderSpan = document.createElement('div');
+            senderSpan.className = 'chat-sender';
+            senderSpan.textContent = sender;
+            
+            const msgText = document.createElement('div');
+            msgText.textContent = msg;
+            
+            div.appendChild(senderSpan);
+            div.appendChild(msgText);
+            
+            const messages = document.getElementById('chatMessages');
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
+</body>
+</html>
