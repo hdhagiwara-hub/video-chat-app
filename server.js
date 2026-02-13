@@ -4,8 +4,22 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        credentials: false,
+        allowedHeaders: ["*"]
+    },
+    allowEIO3: true,
+    transports: ['websocket', 'polling']
+});
+
+// iframe対応のためのヘッダー設定
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('X-Frame-Options', 'ALLOWALL'); // iframeでの表示を許可
+    res.removeHeader('X-Frame-Options'); // 完全に削除
+    next();
 });
 
 app.use(express.static('public'));
@@ -72,3 +86,4 @@ const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`サーバー起動: ${PORT}`);
 });
+
